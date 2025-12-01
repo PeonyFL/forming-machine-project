@@ -1,29 +1,28 @@
-// 1. เรียกใช้ dotenv เป็นบรรทัดแรก
 require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
 const ModbusRTU = require("modbus-serial");
 const path = require('path');
-const db = require('./db');
+// ❌ ลบบรรทัด require('./db') ออกแล้ว
 
 const app = express();
 app.use(cors());
 
-// Serve Frontend Files
+// Serve Frontend
 app.use(express.static(path.join(__dirname, '../client')));
 
-// 2. ดึงค่าจาก ENV (ถ้าไม่มีให้ใช้ค่า Default ด้านหลัง ||)
+// Config
 const PORT = process.env.PORT || 3000;
 const POLLING_RATE = parseInt(process.env.POLLING_RATE) || 60000;
 const PLC_PORT = parseInt(process.env.PLC_PORT) || 502;
 
-// 3. Config เครื่องจักร (ดึง IP จาก ENV)
+// Machine Config
 const MACHINES_CONFIG = [
     { 
         id: 1, 
         name: "MC-01 (Forming)", 
-        ip: process.env.PLC_IP_MC01 || "127.0.0.1", 
+        ip: process.env.PLC_IP_MC01, 
         port: PLC_PORT, 
         department: "forming", 
         spec: "STD-X" 
@@ -80,30 +79,23 @@ class MachineConnection {
     }
 
     readLoop() {
-        // อ่านยาวถึง 2040 (เพื่อเช็คสถานะจบ Lot)
         this.client.readHoldingRegisters(2000, 41)
             .then((data) => {
                 const regs = data.data;
                 const dataStore = globalData[this.config.id];
 
-                // 1. เช็คสถานะจบ Lot (2040)
+                // 1. Lot Status (2040)
                 const lotStatus = regs[40]; 
-                if (lotStatus === 1) {
-                    dataStore.mode = "run";
-                } else {
-                    dataStore.mode = "stop";
-                }
+                if (lotStatus === 1) dataStore.mode = "run";
+                else dataStore.mode = "stop";
 
                 // 2. Standard
                 dataStore.stdV = parseFloat((regs[0] / 100).toFixed(2));
                 dataStore.stdA = parseFloat((regs[1] / 100).toFixed(2));
 
                 // 3. Lot No
-                if (lotStatus === 0) {
-                    dataStore.lot = "LOT ENDED";
-                } else {
-                    dataStore.lot = registersToString(regs.slice(2, 17));
-                }
+                if (lotStatus === 0) dataStore.lot = "LOT ENDED";
+                else dataStore.lot = registersToString(regs.slice(2, 17));
 
                 // 4. Actual Data
                 dataStore.volts = regs.slice(20, 26).map(r => parseFloat((r / 100).toFixed(2)));
@@ -115,12 +107,8 @@ class MachineConnection {
                 dataStore.currentV = parseFloat((sumV / 6).toFixed(2));
                 dataStore.currentA = parseFloat((sumA / 6).toFixed(2));
 
-                // 6. Save DB (เฉพาะตอน Run)
-                if (dataStore.mode === 'run') {
-                    db.insertLog(dataStore);
-                    console.log(`[${this.config.name}] Saved DB: ${dataStore.lot}`);
-                }
-
+                // ❌ ลบส่วน Save DB ออกแล้ว
+                
                 dataStore.lastUpdate = new Date();
             })
             .catch((e) => {
@@ -128,13 +116,11 @@ class MachineConnection {
                 globalData[this.config.id].mode = "stop";
             })
             .finally(() => {
-                // ใช้ POLLING_RATE จาก env
                 setTimeout(() => this.readLoop(), POLLING_RATE);
             });
     }
 }
 
-// Start Connections
 MACHINES_CONFIG.forEach(config => new MachineConnection(config));
 
 // --- API ---
@@ -149,21 +135,13 @@ app.get('/api/machines/:id/live', (req, res) => {
     res.json(mc);
 });
 
-// API สำหรับ Export Excel
-app.get('/api/lots/:id', (req, res) => {
-    db.getLotsByMachine(parseInt(req.params.id), (rows) => res.json(rows));
-});
+// ❌ ลบ API Export History ออก เพราะไม่มี Database
 
-app.get('/api/export/:id/:lot', (req, res) => {
-    db.getDataByLot(parseInt(req.params.id), req.params.lot, (rows) => res.json(rows));
-});
-
-// Fallback Route: ส่งหน้าเว็บ
-app.get('*', (req, res) => {
+// Fallback to Frontend
+app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, '../client/index.html'));
 });
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`Polling every ${POLLING_RATE} ms`);
 });
