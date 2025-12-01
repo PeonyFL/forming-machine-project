@@ -1,24 +1,38 @@
+// 1. เรียกใช้ dotenv เป็นบรรทัดแรก
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const ModbusRTU = require("modbus-serial");
 const path = require('path');
+const db = require('./db');
 
 const app = express();
 app.use(cors());
+
+// Serve Frontend Files
 app.use(express.static(path.join(__dirname, '../client')));
 
-const PORT = 3000;
-const POLLING_RATE = 60000; // อ่านทุก 1 วินาที (ปรับเป็น 60000 ได้ถ้าต้องการ)
+// 2. ดึงค่าจาก ENV (ถ้าไม่มีให้ใช้ค่า Default ด้านหลัง ||)
+const PORT = process.env.PORT || 3000;
+const POLLING_RATE = parseInt(process.env.POLLING_RATE) || 60000;
+const PLC_PORT = parseInt(process.env.PLC_PORT) || 502;
 
-// ตั้งค่า IP ให้ตรงกับ PLC หรือ Simulator
+// 3. Config เครื่องจักร (ดึง IP จาก ENV)
 const MACHINES_CONFIG = [
-    { id: 1, name: "MC-01 (Forming)", ip: "127.0.0.1", port: 8502, department: "forming", spec: "STD-X" },
-    { id: 2, name: "MC-02 (Forming)", ip: "127.0.0.1", port: 8502, department: "forming", spec: "STD-Y" },
-    // เพิ่มเครื่องอื่นๆ...
+    { 
+        id: 1, 
+        name: "MC-01 (Forming)", 
+        ip: process.env.PLC_IP_MC01 || "127.0.0.1", 
+        port: PLC_PORT, 
+        department: "forming", 
+        spec: "STD-X" 
+    }
 ];
 
 let globalData = {};
 
+// Init Data Store
 MACHINES_CONFIG.forEach(mc => {
     globalData[mc.id] = {
         ...mc,
@@ -51,7 +65,7 @@ class MachineConnection {
     }
 
     connect() {
-        console.log(`[${this.config.name}] Connecting...`);
+        console.log(`[${this.config.name}] Connecting to ${this.config.ip}...`);
         this.client.connectTCP(this.config.ip, { port: this.config.port })
             .then(() => {
                 console.log(`[${this.config.name}] Connected!`);
@@ -59,53 +73,53 @@ class MachineConnection {
                 this.readLoop();
             })
             .catch((e) => {
-                console.error(`[${this.config.name}] Err: ${e.message}`);
+                console.error(`[${this.config.name}] Connection Error: ${e.message}`);
                 globalData[this.config.id].mode = "stop";
                 setTimeout(() => this.connect(), 5000);
             });
     }
 
     readLoop() {
-        // อ่านยาวตั้งแต่ 2000 ถึง 2040 (41 Registers)
+        // อ่านยาวถึง 2040 (เพื่อเช็คสถานะจบ Lot)
         this.client.readHoldingRegisters(2000, 41)
             .then((data) => {
                 const regs = data.data;
                 const dataStore = globalData[this.config.id];
 
-                // 1. เช็คสถานะจบ Lot (Address 2040 -> Index 40)
+                // 1. เช็คสถานะจบ Lot (2040)
                 const lotStatus = regs[40]; 
-
-                // ถ้า 2040 = 1 -> RUNNING, ถ้า 0 -> STOPPED
                 if (lotStatus === 1) {
                     dataStore.mode = "run";
                 } else {
                     dataStore.mode = "stop";
                 }
 
-                // 2. Standard (2000, 2001)
+                // 2. Standard
                 dataStore.stdV = parseFloat((regs[0] / 100).toFixed(2));
                 dataStore.stdA = parseFloat((regs[1] / 100).toFixed(2));
 
-                // 3. Lot No (2002-2016)
+                // 3. Lot No
                 if (lotStatus === 0) {
                     dataStore.lot = "LOT ENDED";
                 } else {
                     dataStore.lot = registersToString(regs.slice(2, 17));
                 }
 
-                // 4. Actual Volt (2020-2025)
-                const rawVolts = regs.slice(20, 26);
-                dataStore.volts = rawVolts.map(r => parseFloat((r / 100).toFixed(2)));
+                // 4. Actual Data
+                dataStore.volts = regs.slice(20, 26).map(r => parseFloat((r / 100).toFixed(2)));
+                dataStore.amps = regs.slice(26, 32).map(r => parseFloat((r / 100).toFixed(2)));
 
-                // 5. Actual Amp (2026-2031)
-                const rawAmps = regs.slice(26, 32);
-                dataStore.amps = rawAmps.map(r => parseFloat((r / 100).toFixed(2)));
-
-                // 6. Average
+                // 5. Average
                 const sumV = dataStore.volts.reduce((a, b) => a + b, 0);
                 const sumA = dataStore.amps.reduce((a, b) => a + b, 0);
                 dataStore.currentV = parseFloat((sumV / 6).toFixed(2));
                 dataStore.currentA = parseFloat((sumA / 6).toFixed(2));
+
+                // 6. Save DB (เฉพาะตอน Run)
+                if (dataStore.mode === 'run') {
+                    db.insertLog(dataStore);
+                    console.log(`[${this.config.name}] Saved DB: ${dataStore.lot}`);
+                }
 
                 dataStore.lastUpdate = new Date();
             })
@@ -114,14 +128,16 @@ class MachineConnection {
                 globalData[this.config.id].mode = "stop";
             })
             .finally(() => {
+                // ใช้ POLLING_RATE จาก env
                 setTimeout(() => this.readLoop(), POLLING_RATE);
             });
     }
 }
 
+// Start Connections
 MACHINES_CONFIG.forEach(config => new MachineConnection(config));
 
-// API Endpoints
+// --- API ---
 app.get('/api/machines', (req, res) => {
     res.json(Object.values(globalData));
 });
@@ -133,11 +149,21 @@ app.get('/api/machines/:id/live', (req, res) => {
     res.json(mc);
 });
 
-// Serve Frontend
-app.get('/', (req, res) => {
+// API สำหรับ Export Excel
+app.get('/api/lots/:id', (req, res) => {
+    db.getLotsByMachine(parseInt(req.params.id), (rows) => res.json(rows));
+});
+
+app.get('/api/export/:id/:lot', (req, res) => {
+    db.getDataByLot(parseInt(req.params.id), req.params.lot, (rows) => res.json(rows));
+});
+
+// Fallback Route: ส่งหน้าเว็บ
+app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`Backend running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Polling every ${POLLING_RATE} ms`);
 });
