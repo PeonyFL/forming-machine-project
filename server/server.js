@@ -21,11 +21,11 @@ const PLC_PORT = parseInt(process.env.PLC_PORT) || 502;
 const MACHINES_CONFIG = [
     { 
         id: 1, 
-        name: "MC-01 (Forming)", 
-        ip: process.env.PLC_IP_MC01, 
+        name: "MC-03 (Forming)", 
+        ip: process.env.PLC_IP_FORMING03, 
         port: PLC_PORT, 
         department: "forming", 
-        spec: "STD-X" 
+        spec: "" 
     }
 ];
 
