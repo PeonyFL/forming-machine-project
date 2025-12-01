@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/style.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <div id="loading-spinner" class="d-none position-fixed top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-flex justify-content-center align-items-center" style="z-index: 9999;">
+        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+    </div>
+
+    <div id="view-dashboard" class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h3 class="text-secondary fw-bold"><i class="bi bi-grid-fill me-2"></i>Factory Overview</h3>
+                <p class="text-muted small mb-0">System Status: <span class="text-success fw-bold">Online</span></p>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-white text-secondary border p-2 shadow-sm">
+                    <i class="bi bi-clock me-2"></i><span id="dash-clock">--:--:--</span>
+                </span>
+            </div>
+        </div>
+
+        <!------------------------ Add Department ---------------------------------------------------------->
+        <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active fw-bold" id="pills-forming-tab" data-bs-toggle="pill" data-bs-target="#pills-forming" type="button" role="tab">
+                    <i class="bi bi-gear-wide-connected me-2"></i>Forming
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold" id="pills-tapping-tab" data-bs-toggle="pill" data-bs-target="#pills-tapping" type="button" role="tab">
+                    <i class="bi bi-box-seam me-2"></i>Tapping
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="pills-tabContent">
+            <div class="tab-pane fade show active" id="pills-forming" role="tabpanel">
+                <div class="row g-4" id="grid-forming">
+                    </div>
+            </div>
+            <div class="tab-pane fade" id="pills-tapping" role="tabpanel">
+                <div class="row g-4" id="grid-tapping">
+                    </div>
+            </div>
+        </div>
+        </div>
+        <!----------------------------------------------------------------------------------->
+
+    <div id="view-monitor" class="container-fluid py-2 h-100 d-flex flex-column d-none">
+        <div class="card border-0 shadow-sm mb-3 flex-shrink-0">
+            <div class="card-body py-2">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <button id="btn-back" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</button>
+                    </div>
+                    <div class="col"><h5 class="mb-0 fw-bold text-primary" id="monitor-title">MACHINE</h5></div>
+                    <div class="col-auto d-flex gap-2">
+                        <button id="btn-export" class="btn btn-sm btn-success text-white">
+                            <i class="bi bi-file-earmark-excel-fill me-1"></i> Export
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger position-relative" data-bs-toggle="modal" data-bs-target="#alarmModal">
+                            <i class="bi bi-exclamation-triangle-fill"></i> Alarms
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="alarmBadge" style="display:none;">0</span>
+                        </button>
+                    </div>
+                </div>
+                <hr class="my-2 opacity-25">
+                <div class="row g-2">
+                    <div class="col-lg-3"><label class="small text-muted">LOT</label><input id="detail-lot" class="form-control form-control-sm input-readonly"></div>
+                    <div class="col-lg-3"><label class="small text-muted">SPEC</label><input id="detail-spec" class="form-control form-control-sm input-readonly"></div>
+                    <div class="col-lg-3"><label class="small text-success fw-bold">STD VOLT</label><input id="stdVolt" class="form-control form-control-sm input-readonly text-success"></div>
+                    <div class="col-lg-3"><label class="small text-primary fw-bold">STD AMP</label><input id="stdAmp" class="form-control form-control-sm input-readonly text-primary"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 flex-grow-1" style="min-height: 0;">
+            <div class="col-lg-5 h-100">
+                <div class="history-container shadow-sm scrollbar-primary h-100">
+                    <table id="history-table" class="table table-striped table-hover table-bordered table-sm text-center mb-0" style="font-size:0.75rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th rowspan="2" class="sticky-top-th bg-light">Time</th>
+                                <th colspan="6" class="sticky-top-th text-success border-bottom-0">Volt</th>
+                                <th colspan="6" class="sticky-top-th text-primary border-bottom-0">Amp</th>
+                            </tr>
+                            <tr class="sticky-top-th bg-light" style="top: 25px;">
+                                <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th>
+                                <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-7 h-100 d-flex flex-column gap-3 overflow-auto">
+                <div class="row g-2 flex-shrink-0">
+                    <div class="col-6"><div class="card border-0 shadow-sm p-2 text-center"><small class="text-success fw-bold">AVG VOLTAGE</small><h4 id="current-avg-volt" class="mb-0">0.00</h4></div></div>
+                    <div class="col-6"><div class="card border-0 shadow-sm p-2 text-center"><small class="text-primary fw-bold">AVG CURRENT</small><h4 id="current-avg-amp" class="mb-0">0.00</h4></div></div>
+                </div>
+                <div class="card border-0 shadow-sm flex-grow-1"><div class="card-body p-2"><canvas id="voltChart"></canvas></div></div>
+                <div class="card border-0 shadow-sm flex-grow-1"><div class="card-body p-2"><canvas id="ampChart"></canvas></div></div>
+
+                <div class="card border-0 shadow-sm flex-shrink-0 mt-2">
+                    <div class="card-header bg-white border-bottom-0 py-2">
+                        <h6 class="mb-0 text-danger fw-bold" style="font-size: 0.85rem;">
+                            <i class="bi bi-lightning-fill me-2"></i>Recent Alarms (Last 5)
+                        </h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-sm table-striped mb-0 text-center" style="font-size: 0.75rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 35%;">Time</th>
+                                    <th style="width: 15%;">Type</th>
+                                    <th style="width: 15%;">CH</th>
+                                    <th style="width: 15%;">Value</th>
+                                    <th style="width: 20%;">Limit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-alarms-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="alarmModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white py-2">
+                    <h6 class="modal-title">Alarm Log</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <table class="table table-sm table-striped mb-0 text-center"><tbody id="alarmBody"></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

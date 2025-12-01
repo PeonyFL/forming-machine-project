@@ -1,0 +1,44 @@
+:root {
+    --color-bg: #f4f6f9;
+    --color-surface: #ffffff;
+    --color-success: #198754;
+    --color-danger: #dc3545;
+    --color-secondary: #6c757d;
+    --history-height: 60vh;
+}
+
+body {
+    background-color: var(--color-bg);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.cursor-pointer { cursor: pointer; transition: all 0.2s ease; }
+.cursor-pointer:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important; }
+
+.history-container {
+    height: var(--history-height);
+    overflow-y: auto;
+    background: var(--color-surface);
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+}
+
+.sticky-top-th { position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.input-readonly { background-color: #e9ecef !important; pointer-events: none; font-weight: 600; }
+.text-alarm { color: #dc3545 !important; font-weight: 800; }
+.status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+/* Status Styles */
+.card-running { border-left: 5px solid var(--color-success); }
+.card-stop { border-left: 5px solid var(--color-secondary); }
+.card-alarm { border: 2px solid var(--color-danger); animation: pulse-red 1.5s infinite; }
+
+/* Animations */
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+
+.blink-text { animation: blinker 1s linear infinite; }
+@keyframes blinker { 50% { opacity: 0; } }
