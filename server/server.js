@@ -20,13 +20,53 @@ const PLC_PORT = parseInt(process.env.PLC_PORT) || 502;
 // Machine Config
 const MACHINES_CONFIG = [
     { 
-        id: 1, 
+        id: 301, 
+        name: "MC-01 (Forming)", 
+        ip: process.env.PLC_IP_FORMING01, 
+        port: PLC_PORT, 
+        department: "forming", 
+        spec: "" 
+    },
+    { 
+        id: 302, 
+        name: "MC-02 (Forming)", 
+        ip: process.env.PLC_IP_FORMING02, 
+        port: PLC_PORT, 
+        department: "forming", 
+        spec: "" 
+    },
+    { 
+        id: 303, 
         name: "MC-03 (Forming)", 
         ip: process.env.PLC_IP_FORMING03, 
         port: PLC_PORT, 
         department: "forming", 
         spec: "" 
-    }
+    },
+    { 
+        id: 304, 
+        name: "MC-04 (Forming)", 
+        ip: process.env.PLC_IP_FORMING04, 
+        port: PLC_PORT, 
+        department: "forming", 
+        spec: "" 
+    },
+    { 
+        id: 305, 
+        name: "MC-05 (Forming)", 
+        ip: process.env.PLC_IP_FORMING05, 
+        port: PLC_PORT, 
+        department: "forming", 
+        spec: "" 
+    },
+    { 
+        id: 306, 
+        name: "MC-06 (Forming)", 
+        ip: process.env.PLC_IP_FORMING06, 
+        port: PLC_PORT, 
+        department: "forming",
+        spec: "" 
+    },
 ];
 
 let globalData = {};
@@ -95,7 +135,7 @@ class MachineConnection {
 
                 // 3. Lot No
                 if (lotStatus === 0) dataStore.lot = "LOT ENDED";
-                else dataStore.lot = registersToString(regs.slice(2, 17));
+                else dataStore.lot = registersToString(regs.slice(2, 12));
 
                 // 4. Actual Data
                 dataStore.volts = regs.slice(20, 26).map(r => parseFloat((r / 100).toFixed(2)));
