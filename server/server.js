@@ -1,9 +1,9 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
 const ModbusRTU = require("modbus-serial");
-const path = require('path');
 // ❌ ลบบรรทัด require('./db') ออกแล้ว
 
 const app = express();
@@ -19,53 +19,21 @@ const PLC_PORT = parseInt(process.env.PLC_PORT) || 502;
 
 // Machine Config
 const MACHINES_CONFIG = [
-    { 
-        id: 301, 
-        name: "MC-01 (Forming)", 
-        ip: process.env.PLC_IP_FORMING01, 
-        port: PLC_PORT, 
-        department: "forming", 
-        spec: "" 
-    },
-    { 
-        id: 302, 
-        name: "MC-02 (Forming)", 
-        ip: process.env.PLC_IP_FORMING02, 
-        port: PLC_PORT, 
-        department: "forming", 
-        spec: "" 
-    },
-    { 
-        id: 303, 
-        name: "MC-03 (Forming)", 
-        ip: process.env.PLC_IP_FORMING03, 
-        port: PLC_PORT, 
-        department: "forming", 
-        spec: "" 
-    },
-    { 
-        id: 304, 
-        name: "MC-04 (Forming)", 
-        ip: process.env.PLC_IP_FORMING04, 
-        port: PLC_PORT, 
-        department: "forming", 
-        spec: "" 
-    },
-    { 
-        id: 305, 
-        name: "MC-05 (Forming)", 
-        ip: process.env.PLC_IP_FORMING05, 
-        port: PLC_PORT, 
-        department: "forming", 
-        spec: "" 
-    },
-    { 
-        id: 306, 
-        name: "MC-06 (Forming)", 
-        ip: process.env.PLC_IP_FORMING06, 
-        port: PLC_PORT, 
+    {
+        id: 301,
+        name: "MC-01 (Forming)",
+        ip: process.env.PLC_IP_FORMING01,
+        port: PLC_PORT,
         department: "forming",
-        spec: "" 
+        spec: ""
+    },
+    {
+        id: 303,
+        name: "MC-03 (Forming)",
+        ip: process.env.PLC_IP_FORMING03,
+        port: PLC_PORT,
+        department: "forming",
+        spec: ""
     },
 ];
 
@@ -79,8 +47,8 @@ MACHINES_CONFIG.forEach(mc => {
         lot: "CONNECTING...",
         stdV: 0, stdA: 0,
         currentV: 0, currentA: 0,
-        volts: [0,0,0,0,0,0],
-        amps: [0,0,0,0,0,0],
+        volts: [0, 0, 0, 0, 0, 0],
+        amps: [0, 0, 0, 0, 0, 0],
         lastUpdate: new Date()
     };
 });
@@ -114,7 +82,9 @@ class MachineConnection {
             .catch((e) => {
                 console.error(`[${this.config.name}] Connection Error: ${e.message}`);
                 globalData[this.config.id].mode = "stop";
-                setTimeout(() => this.connect(), 5000);
+                this.client.close(() => {
+                    setTimeout(() => this.connect(), 5000);
+                });
             });
     }
 
@@ -125,7 +95,7 @@ class MachineConnection {
                 const dataStore = globalData[this.config.id];
 
                 // 1. Lot Status (2040)
-                const lotStatus = regs[40]; 
+                const lotStatus = regs[40];
                 if (lotStatus === 1) dataStore.mode = "run";
                 else dataStore.mode = "stop";
 
@@ -148,15 +118,18 @@ class MachineConnection {
                 dataStore.currentA = parseFloat((sumA / 6).toFixed(2));
 
                 // ❌ ลบส่วน Save DB ออกแล้ว
-                
-                dataStore.lastUpdate = new Date();
+
+                dataStore.lastUpdate = new Date(); // Update time
+
+                // Continue reading
+                setTimeout(() => this.readLoop(), POLLING_RATE);
             })
             .catch((e) => {
                 console.error(`[${this.config.name}] Read Error: ${e.message}`);
                 globalData[this.config.id].mode = "stop";
-            })
-            .finally(() => {
-                setTimeout(() => this.readLoop(), POLLING_RATE);
+                this.client.close(() => {
+                    setTimeout(() => this.connect(), 5000);
+                });
             });
     }
 }

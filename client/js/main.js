@@ -7,8 +7,8 @@ import { calculateAverage, generateHistoryData, formatDateTime } from './utils.j
 let dashboardInterval = null;
 let monitorInterval = null;
 let currentMachineId = null;
-let lastLotName = ""; 
-let allMachinesCache = []; 
+let lastLotName = "";
+let allMachinesCache = [];
 
 function init() {
     // ----------------------------------------------------
@@ -20,14 +20,14 @@ function init() {
     if (targetId) {
         // กรณี: มี ?id=X (Kiosk Mode / หน้าเครื่องจักร)
         console.log(`Direct access to Machine ID: ${targetId}`);
-        
+
         // ข้าม Dashboard ไปเปิดหน้า Monitor เลย
         openMonitor(parseInt(targetId));
 
         // ซ่อนปุ่ม Back เพื่อไม่ให้กดกลับไปหน้า Dashboard ได้
         const btnBack = document.getElementById('btn-back');
         if (btnBack) btnBack.style.display = 'none';
-        
+
     } else {
         // กรณี: ไม่มี ?id (Manager Mode / Dashboard รวม)
         UI.toggleView('dashboard');
@@ -50,7 +50,7 @@ function init() {
     });
 
     document.getElementById('btn-back').addEventListener('click', backToDashboard);
-    
+
     // เริ่มระบบ Export
     initExportSystem();
 }
@@ -71,7 +71,7 @@ async function runDashboardLoop() {
 
 async function openDashboardAlarm(id) {
     const mc = await API.fetchMachineData(id);
-    if(!mc) return;
+    if (!mc) return;
 
     document.getElementById('alarmBody').innerHTML = '';
     document.getElementById('alarmBadge').innerText = '0';
@@ -80,8 +80,8 @@ async function openDashboardAlarm(id) {
     // ดึง History มาโชว์ใน Alarm Modal
     const history = generateHistoryData(mc, 50);
     history.forEach(row => {
-        row.volts.forEach((v, idx) => { if (Math.abs(v - mc.stdV) > CONFIG.ALARM_TOLERANCE) UI.addAlarmLog(row.timeStr, 'Volt', idx+1, v, mc.stdV); });
-        row.amps.forEach((a, idx) => { if (Math.abs(a - mc.stdA) > CONFIG.ALARM_TOLERANCE) UI.addAlarmLog(row.timeStr, 'Amp', idx+1, a, mc.stdA); });
+        row.volts.forEach((v, idx) => { if (Math.abs(v - mc.stdV) > CONFIG.ALARM_TOLERANCE) UI.addAlarmLog(row.timeStr, 'Volt', idx + 1, v, mc.stdV); });
+        row.amps.forEach((a, idx) => { if (Math.abs(a - mc.stdA) > CONFIG.ALARM_TOLERANCE) UI.addAlarmLog(row.timeStr, 'Amp', idx + 1, a, mc.stdA); });
     });
     UI.showAlarmModalDirectly();
 }
@@ -90,23 +90,23 @@ async function openDashboardAlarm(id) {
 async function openMonitor(id) {
     if (dashboardInterval) clearInterval(dashboardInterval);
     currentMachineId = id;
-    
+
     // เคลียร์ค่าหน้าจอ
     document.getElementById('historyBody').innerHTML = '';
     document.getElementById('alarmBody').innerHTML = '';
-    document.getElementById('recent-alarms-body').innerHTML = ''; 
+    document.getElementById('recent-alarms-body').innerHTML = '';
     document.getElementById('alarmBadge').innerText = '0';
     document.getElementById('alarmBadge').style.display = 'none';
 
     UI.toggleView('monitor');
-    
-    const dummyData = await API.fetchMachineData(id); 
-    if(!dummyData) {
+
+    const dummyData = await API.fetchMachineData(id);
+    if (!dummyData) {
         alert("Machine Not Found!"); // แจ้งเตือนถ้าใส่ ID มั่วใน URL
         return;
     }
 
-    lastLotName = dummyData.lot; 
+    lastLotName = dummyData.lot;
 
     // Update Header
     document.getElementById('monitor-title').innerHTML = `<i class="bi bi-cpu me-2"></i>${dummyData.name}`;
@@ -121,14 +121,15 @@ async function openMonitor(id) {
 
     // Check Alarm History
     historyData.slice().reverse().forEach(row => {
-        row.volts.forEach((v, idx) => { if (Math.abs(v - dummyData.stdV) > CONFIG.ALARM_TOLERANCE) UI.addRecentAlarm(row.timeStr, 'Volt', idx+1, v, dummyData.stdV); });
-        row.amps.forEach((a, idx) => { if (Math.abs(a - dummyData.stdA) > CONFIG.ALARM_TOLERANCE) UI.addRecentAlarm(row.timeStr, 'Amp', idx+1, a, dummyData.stdA); });
+        row.volts.forEach((v, idx) => { if (Math.abs(v - dummyData.stdV) > CONFIG.ALARM_TOLERANCE) UI.addRecentAlarm(row.timeStr, 'Volt', idx + 1, v, dummyData.stdV); });
+        row.amps.forEach((a, idx) => { if (Math.abs(a - dummyData.stdA) > CONFIG.ALARM_TOLERANCE) UI.addRecentAlarm(row.timeStr, 'Amp', idx + 1, a, dummyData.stdA); });
     });
 
     Charts.initCharts();
     const historyAvgV = historyData.map(h => calculateAverage(h.volts));
     const historyAvgA = historyData.map(h => calculateAverage(h.amps));
-    Charts.updateCharts(historyAvgV, historyAvgA);
+    const historyLabels = historyData.map(h => h.timeStr); // ดึงเวลามาเป็น Labels
+    Charts.updateCharts(historyAvgV, historyAvgA, historyLabels);
 
     if (monitorInterval) clearInterval(monitorInterval);
     monitorInterval = setInterval(runMonitorLoop, CONFIG.MONITOR_INTERVAL);
@@ -142,7 +143,7 @@ async function runMonitorLoop() {
     // --- CHECK LOT CHANGE ---
     if (data.lot !== lastLotName) {
         document.getElementById('detail-lot').value = data.lot;
-        
+
         // ถ้าเป็น Lot ใหม่ (และไม่ใช่จบ Lot) ให้ล้างกราฟ
         if (data.lot !== "LOT ENDED" && data.mode === "run") {
             console.log("New Lot Started! Resetting Data...");
@@ -163,7 +164,7 @@ async function runMonitorLoop() {
 
     const avgV = parseFloat(calculateAverage(data.volts));
     const avgA = parseFloat(calculateAverage(data.amps));
-    Charts.updateCharts([avgV], [avgA]); 
+    Charts.updateCharts([avgV], [avgA], timeStr);
 
     document.getElementById('current-avg-volt').innerText = avgV.toFixed(2);
     document.getElementById('current-avg-amp').innerText = avgA.toFixed(2);
@@ -183,7 +184,7 @@ function initExportSystem() {
     const btnDownload = document.getElementById('btn-confirm-export');
     const exportModal = document.getElementById('exportModal');
 
-    if(!machineSelect || !exportModal) return; // ป้องกัน Error ถ้ายังไม่ได้แก้ HTML
+    if (!machineSelect || !exportModal) return; // ป้องกัน Error ถ้ายังไม่ได้แก้ HTML
 
     exportModal.addEventListener('show.bs.modal', () => {
         machineSelect.innerHTML = '<option value="" disabled selected>-- Choose Machine --</option>';
@@ -213,7 +214,7 @@ function initExportSystem() {
                 lotSelect.appendChild(opt);
             });
             lotSelect.disabled = false;
-        } catch(e) {
+        } catch (e) {
             console.error(e);
             lotSelect.innerHTML = '<option>Error loading lots</option>';
         }
@@ -231,16 +232,16 @@ function initExportSystem() {
         try {
             const res = await fetch(`${CONFIG.API_BASE_URL}/export/${id}/${lot}`);
             const data = await res.json();
-            if(data.length === 0) { alert("No data found"); return; }
+            if (data.length === 0) { alert("No data found"); return; }
 
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Data");
             XLSX.writeFile(wb, `${machineName}_${lot}.xlsx`);
-            
+
             const modalInstance = bootstrap.Modal.getInstance(exportModal);
             modalInstance.hide();
-        } catch(e) {
+        } catch (e) {
             console.error(e);
             alert("Export Failed");
         }

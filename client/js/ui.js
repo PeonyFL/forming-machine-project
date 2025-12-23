@@ -1,139 +1,223 @@
 import { CONFIG } from './config.js';
-import { formatDateTime } from './utils.js';
 
+// ฟังก์ชันสลับหน้าจอ (Dashboard <-> Monitor)
 export function toggleView(viewName) {
-    const dash = document.getElementById('view-dashboard');
-    const monitor = document.getElementById('view-monitor');
-    if (viewName === 'monitor') {
-        dash.classList.add('d-none');
-        monitor.classList.remove('d-none');
-        monitor.classList.add('d-flex');
+    document.getElementById('view-dashboard').classList.add('d-none');
+    document.getElementById('view-monitor').classList.add('d-none');
+    
+    if (viewName === 'dashboard') {
+        document.getElementById('view-dashboard').classList.remove('d-none');
     } else {
-        monitor.classList.add('d-none');
-        monitor.classList.remove('d-flex');
-        dash.classList.remove('d-none');
+        document.getElementById('view-monitor').classList.remove('d-none');
     }
 }
 
+// อัปเดตนาฬิกา
 export function updateClock() {
-    document.getElementById('dash-clock').innerText = formatDateTime(new Date());
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('th-TH', { hour12: false });
+    const el = document.getElementById('dash-clock');
+    if(el) el.innerText = timeString;
 }
 
+// --- DASHBOARD RENDER ---
 export function renderDashboardGrid(machines) {
     const gridForming = document.getElementById('grid-forming');
-    const gridTapping = document.getElementById('grid-tapping');
-    
-    // เคลียร์ค่าเก่า
+    const gridPacking = document.getElementById('grid-packing');
+    const gridQC = document.getElementById('grid-qc'); 
+
     if(gridForming) gridForming.innerHTML = '';
-    if(gridTapping) gridTapping.innerHTML = '';
+    if(gridPacking) gridPacking.innerHTML = '';
+    if(gridQC) gridQC.innerHTML = '';
 
     machines.forEach(mc => {
-        const { status, cssClass, badgeClass, textV, textA } = getStatusStyles(mc, mc.currentV, mc.currentA);
-        const badgePointer = status === 'ALARM' ? 'cursor-pointer' : '';
-        const badgeTitle = status === 'ALARM' ? 'title="Click to see Alarm Log"' : '';
+        // ------------------------------------------------------------------
+        // LOGIC CHECK ALARM (DASHBOARD)
+        // ------------------------------------------------------------------
+        
+        // เช็คก่อนเลยว่าเครื่องทำงานอยู่ไหม? (ถ้า Lot End หรือ Stop จะเป็น false)
+        const isRunning = mc.mode === 'run';
+
+        // 1. Volt: เช็ค Range + ต้อง Run อยู่เท่านั้น
+        const isAlarmV = isRunning && (Math.abs(mc.currentV - mc.stdV) > CONFIG.ALARM_TOLERANCE);
+
+        // 2. Amp: เช็ค Overload + ต้อง Run อยู่เท่านั้น
+        const isAlarmA = isRunning && (mc.currentA > (mc.stdA + CONFIG.ALARM_TOLERANCE));
+        
+        // ------------------------------------------------------------------
+
+        const statusClass = mc.mode === 'run' ? 'status-run' : 'status-stop';
+        const statusText = mc.mode === 'run' ? 'RUNNING' : 'STOPPED';
+        
+        // ถ้า Alarm ให้ตัวหนังสือเป็นสีแดง
+        const textV = isAlarmV ? 'text-danger fw-bold' : 'text-success';
+        const textA = isAlarmA ? 'text-danger fw-bold' : 'text-success';
+        
+        // ถ้ามี Alarm อย่างใดอย่างหนึ่ง ให้ขอบการ์ดแดงกระพริบ
+        const cardBorder = (isAlarmV || isAlarmA) ? 'card-alarm' : '';
+        const alarmBadgeDisplay = (isAlarmV || isAlarmA) ? 'block' : 'none';
 
         const html = `
-            <div class="col-md-6 col-lg-3">
-                <div class="card shadow-sm h-100 ${cssClass}" data-id="${mc.id}">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="fw-bold mb-0 text-secondary">${mc.name}</h6>
-                            <span class="badge ${badgeClass} border px-3 py-2 ${badgePointer} alarm-badge-btn" ${badgeTitle} style="min-width: 80px;">
-                                ${status}
-                            </span>
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="card h-100 shadow-sm ${cardBorder}" data-id="${mc.id}">
+                <div class="card-header d-flex justify-content-between align-items-center bg-white py-2">
+                    <h6 class="m-0 fw-bold text-secondary"><i class="bi bi-cpu me-2"></i>${mc.name}</h6>
+                    <span class="badge ${statusClass}">${statusText}</span>
+                </div>
+                <div class="card-body position-relative p-3">
+                    <button class="position-absolute top-0 end-0 m-2 badge rounded-pill bg-danger border-0 alarm-badge-btn" 
+                            style="display: ${alarmBadgeDisplay}; z-index: 10;">
+                        ALARM
+                    </button>
+                    
+                    <div class="card-click-area" style="cursor: pointer;">
+                        <div class="mb-2">
+                            <small class="text-muted d-block" style="font-size: 0.75rem;">Lot No.</small>
+                            <span class="fw-bold fs-5 text-dark">${mc.lot}</span>
                         </div>
-                        <div class="mb-3 small">
-                            <div class="d-flex justify-content-between text-muted"><span>Lot:</span> <span class="fw-bold text-dark">${mc.lot}</span></div>
-                            <div class="d-flex justify-content-between text-muted"><span>Spec:</span> <span class="fw-bold text-dark">${mc.spec}</span></div>
-                        </div>
-                        <div class="row g-2 text-center">
-                            <div class="col-6 cursor-pointer card-click-area"><div class="bg-light rounded p-2 border"><small class="text-secondary d-block" style="font-size:0.7rem">VOLT</small><span class="fw-bold ${textV}">${mc.currentV} V</span></div></div>
-                            <div class="col-6 cursor-pointer card-click-area"><div class="bg-light rounded p-2 border"><small class="text-secondary d-block" style="font-size:0.7rem">AMP</small><span class="fw-bold ${textA}">${mc.currentA} A</span></div></div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <div class="p-2 bg-light rounded text-center">
+                                    <small class="d-block text-secondary" style="font-size: 0.7rem;">VOLT (Avg)</small>
+                                    <span class="${textV} fs-5">${mc.currentV.toFixed(2)} V</span>
+                                    <div style="font-size: 0.65rem;" class="text-muted">Std: ${mc.stdV}</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-2 bg-light rounded text-center">
+                                    <small class="d-block text-secondary" style="font-size: 0.7rem;">AMP (Avg)</small>
+                                    <span class="${textA} fs-5">${mc.currentA.toFixed(2)} A</span>
+                                    <div style="font-size: 0.65rem;" class="text-muted">Std: ${mc.stdA}</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="card-footer bg-white border-0 text-center pb-3 cursor-pointer card-click-area"><small class="text-muted">Click for Details <i class="bi bi-arrow-right"></i></small></div>
                 </div>
-            </div>`;
+                <div class="card-footer bg-white py-1">
+                    <small class="text-muted" style="font-size: 0.7rem;">
+                        <i class="bi bi-clock-history me-1"></i>Last update: ${new Date(mc.lastUpdate).toLocaleTimeString()}
+                    </small>
+                </div>
+            </div>
+        </div>
+        `;
 
-        // แยกแผนก
         if (mc.department === 'forming' && gridForming) {
             gridForming.insertAdjacentHTML('beforeend', html);
-        } else if (mc.department === 'tapping' && gridTapping) {
-            gridTapping.insertAdjacentHTML('beforeend', html);
+        } else if (mc.department === 'packing' && gridPacking) {
+            gridPacking.insertAdjacentHTML('beforeend', html);
+        } else if (mc.department === 'qc' && gridQC) {
+            gridQC.insertAdjacentHTML('beforeend', html);
         }
     });
 }
 
-function createRowHTML(timeStr, volts, amps, stdV, stdA) {
-    let html = `<td class="fw-bold text-secondary" style="font-size:0.65rem; white-space:nowrap;">${timeStr}</td>`;
-    volts.forEach(v => {
-        if (Math.abs(v - stdV) > CONFIG.ALARM_TOLERANCE) html += `<td class="text-alarm">${v}</td>`;
-        else html += `<td class="text-success">${v}</td>`;
+// --- MONITOR TABLE RENDER ---
+
+export function fillHistoryTable(data, mc) {
+    const tbody = document.getElementById('historyBody');
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    data.forEach(row => {
+        prependHistoryRow(row.timeStr, row.volts, row.amps, mc, null); 
     });
-    amps.forEach(a => {
-        if (Math.abs(a - stdA) > CONFIG.ALARM_TOLERANCE) html += `<td class="text-alarm">${a}</td>`;
-        else html += `<td class="text-primary">${a}</td>`;
-    });
-    return html;
 }
 
-export function fillHistoryTable(historyArray, machine) {
+export function prependHistoryRow(timeStr, volts, amps, mc, onAlarm) {
     const tbody = document.getElementById('historyBody');
-    tbody.innerHTML = ''; 
-    const fragment = document.createDocumentFragment();
-    for (let i = historyArray.length - 1; i >= 0; i--) {
-        const item = historyArray[i];
-        const tr = document.createElement('tr');
-        tr.innerHTML = createRowHTML(item.timeStr, item.volts, item.amps, machine.stdV, machine.stdA);
-        fragment.appendChild(tr);
-    }
-    tbody.appendChild(fragment);
-}
+    if(!tbody) return;
 
-export function prependHistoryRow(timeStr, volts, amps, machine, onAlarm) {
-    const tbody = document.getElementById('historyBody');
     const tr = document.createElement('tr');
-    tr.innerHTML = createRowHTML(timeStr, volts, amps, machine.stdV, machine.stdA);
-    tbody.prepend(tr);
-    if(tbody.children.length > CONFIG.HISTORY_ROWS) tbody.lastElementChild.remove();
+    
+    // เช็คสถานะเครื่อง (ต้อง Run เท่านั้นถึงจะ Alarm)
+    const isRunning = mc.mode === 'run';
 
-    if(onAlarm) {
-        volts.forEach((v, idx) => { if(Math.abs(v - machine.stdV) > CONFIG.ALARM_TOLERANCE) onAlarm(timeStr, 'Volt', idx+1, v, machine.stdV); });
-        amps.forEach((a, idx) => { if(Math.abs(a - machine.stdA) > CONFIG.ALARM_TOLERANCE) onAlarm(timeStr, 'Amp', idx+1, a, machine.stdA); });
+    // 1. Column Volt
+    const voltCols = volts.map((val, idx) => {
+        // Logic: ต้อง Run อยู่ และ ค่าผิดปกติ
+        const isAlarm = isRunning && (Math.abs(val - mc.stdV) > CONFIG.ALARM_TOLERANCE);
+        
+        if (isAlarm) {
+            if (onAlarm) onAlarm(timeStr, 'Volt', idx + 1, val, mc.stdV);
+            return `<td class="text-danger fw-bold" style="background-color: rgba(220,53,69,0.05);">${val.toFixed(2)}</td>`;
+        }
+        return `<td>${val.toFixed(2)}</td>`;
+    }).join('');
+
+    // 2. Column Amp
+    const ampCols = amps.map((val, idx) => {
+        // Logic: ต้อง Run อยู่ และ ค่าเกิน (Overload)
+        const isAlarm = isRunning && (val > (mc.stdA + CONFIG.ALARM_TOLERANCE));
+        
+        if (isAlarm) {
+            if (onAlarm) onAlarm(timeStr, 'Amp', idx + 1, val, mc.stdA);
+            return `<td class="text-danger fw-bold" style="background-color: rgba(220,53,69,0.05);">${val.toFixed(2)}</td>`;
+        }
+        return `<td>${val.toFixed(2)}</td>`;
+    }).join('');
+
+    tr.innerHTML = `
+        <td class="text-secondary">${timeStr}</td>
+        ${voltCols}
+        ${ampCols}
+    `;
+
+    tbody.prepend(tr);
+
+    if (tbody.children.length > CONFIG.HISTORY_ROWS) {
+        tbody.lastElementChild.remove();
     }
+}
+
+// --- HELPER: ALARM LOGS ---
+
+export function addAlarmLog(time, type, ch, val, std) {
+    const tbody = document.getElementById('alarmBody');
+    if(!tbody) return;
+
+    const badge = document.getElementById('alarmBadge');
+    if(badge) {
+        let count = parseInt(badge.innerText) || 0;
+        badge.innerText = count + 1;
+        badge.style.display = 'inline-block';
+    }
+
+    const row = `
+        <tr>
+            <td>${time}</td>
+            <td><span class="badge bg-danger">${type}</span></td>
+            <td>CH-${ch}</td>
+            <td class="fw-bold text-danger">${val.toFixed(2)}</td>
+            <td class="text-muted">${std.toFixed(2)}</td>
+        </tr>
+    `;
+    tbody.insertAdjacentHTML('afterbegin', row);
 }
 
 export function addRecentAlarm(time, type, ch, val, std) {
     const tbody = document.getElementById('recent-alarms-body');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="text-secondary" style="font-size:0.7rem">${time}</td><td class="fw-bold ${type === 'Volt' ? 'text-success' : 'text-primary'}">${type}</td><td>#${ch}</td><td class="text-danger fw-bold">${val}</td><td class="text-muted">${std}</td>`;
-    tbody.prepend(tr);
-    if (tbody.children.length > 5) tbody.lastElementChild.remove();
-}
+    if(!tbody) return;
 
-export function addAlarmLog(time, type, ch, val, std) {
-    const tbody = document.getElementById('alarmBody');
-    const badge = document.getElementById('alarmBadge');
-    const currentCount = parseInt(badge.innerText || '0') + 1;
-    badge.innerText = currentCount;
-    if(badge.style.display === 'none') badge.style.display = 'inline-block';
-    const tr = document.createElement('tr');
-    tr.className = "bg-danger bg-opacity-10";
-    tr.innerHTML = `<td style="font-size:0.7rem">${time}</td><td class="fw-bold">${type}</td><td>#${ch}</td><td class="text-danger fw-bold">${val}</td><td>${std}</td>`;
-    tbody.prepend(tr);
+    const row = `
+        <tr>
+            <td><small>${time}</small></td>
+            <td><span class="badge bg-danger" style="font-size: 0.7rem;">${type}</span></td>
+            <td><small>CH-${ch}</small></td>
+            <td class="fw-bold text-danger"><small>${val.toFixed(2)}</small></td>
+            <td><small class="text-muted">Std: ${std}</small></td>
+        </tr>
+    `;
+    tbody.insertAdjacentHTML('afterbegin', row);
+
+    if (tbody.children.length > 5) {
+        tbody.lastElementChild.remove();
+    }
 }
 
 export function showAlarmModalDirectly() {
-    const modalElement = document.getElementById('alarmModal');
-    // @ts-ignore
-    const modal = new bootstrap.Modal(modalElement);
-    modal.show();
-}
-
-function getStatusStyles(mc, v, a) {
-    if (mc.mode === 'stop') return { status: 'STOPPED', cssClass: 'card-stop', badgeClass: 'bg-secondary', textV: 'text-muted', textA: 'text-muted' };
-    const isAlarmV = Math.abs(v - mc.stdV) > CONFIG.ALARM_TOLERANCE;
-    const isAlarmA = Math.abs(a - mc.stdA) > CONFIG.ALARM_TOLERANCE;
-    if (isAlarmV || isAlarmA) return { status: 'ALARM', cssClass: 'card-alarm', badgeClass: 'bg-danger blink-text', textV: isAlarmV ? 'text-danger fw-bold blink-text' : 'text-success', textA: isAlarmA ? 'text-danger fw-bold blink-text' : 'text-primary' };
-    return { status: 'RUNNING', cssClass: 'card-running', badgeClass: 'bg-success', textV: 'text-success', textA: 'text-primary' };
+    const modalEl = document.getElementById('alarmModal');
+    if(modalEl) {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
 }
