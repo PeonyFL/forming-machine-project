@@ -77,6 +77,7 @@ class MachineConnection {
             .then(() => {
                 console.log(`[${this.config.name}] Connected!`);
                 this.client.setID(1);
+                this.client.setTimeout(5000);
                 this.readLoop();
             })
             .catch((e) => {
