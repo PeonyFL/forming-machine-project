@@ -67,12 +67,20 @@ function registersToString(registers) {
 class MachineConnection {
     constructor(config) {
         this.config = config;
-        this.client = new ModbusRTU();
+        this.client = null; // Client will be created in connect()
         this.connect();
     }
 
     connect() {
+        // Destroy existing client if any
+        if (this.client) {
+            try { this.client.close(() => { }); } catch (e) { }
+            this.client = null;
+        }
+
+        this.client = new ModbusRTU();
         console.log(`[${this.config.name}] Connecting to ${this.config.ip}...`);
+
         this.client.connectTCP(this.config.ip, { port: this.config.port })
             .then(() => {
                 console.log(`[${this.config.name}] Connected!`);
@@ -83,13 +91,17 @@ class MachineConnection {
             .catch((e) => {
                 console.error(`[${this.config.name}] Connection Error: ${e.message}`);
                 globalData[this.config.id].mode = "stop";
-                this.client.close(() => {
-                    setTimeout(() => this.connect(), 5000);
-                });
+                // Retry after 5 seconds
+                setTimeout(() => this.connect(), 5000);
             });
     }
 
     readLoop() {
+        if (!this.client || !this.client.isOpen) {
+            console.log(`[${this.config.name}] Connection lost, reconnecting...`);
+            return this.connect();
+        }
+
         this.client.readHoldingRegisters(2000, 41)
             .then((data) => {
                 const regs = data.data;
@@ -118,8 +130,6 @@ class MachineConnection {
                 dataStore.currentV = parseFloat((sumV / 6).toFixed(2));
                 dataStore.currentA = parseFloat((sumA / 6).toFixed(2));
 
-                // ❌ ลบส่วน Save DB ออกแล้ว
-
                 dataStore.lastUpdate = new Date(); // Update time
 
                 // Continue reading
@@ -128,9 +138,9 @@ class MachineConnection {
             .catch((e) => {
                 console.error(`[${this.config.name}] Read Error: ${e.message}`);
                 globalData[this.config.id].mode = "stop";
-                this.client.close(() => {
-                    setTimeout(() => this.connect(), 5000);
-                });
+
+                // Force reconnect on read error
+                setTimeout(() => this.connect(), 5000);
             });
     }
 }
